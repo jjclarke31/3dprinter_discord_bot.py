@@ -118,7 +118,7 @@ NOTIFICATION_CHANNEL_ID=your_channel_id_here
             "type": "prusa",
             "ip": "192.168.1.102",
             "auth_type": "digest",
-            "username": "maker",
+            "username": "your_prusalink_username",
             "password": "your_prusalink_password"
         }
     ]
