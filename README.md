@@ -40,7 +40,7 @@ The bot parses the username, looks up the Discord member, and @mentions them in 
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.10+
 - A Discord bot token ([create one here](https://discord.com/developers/applications))
 - Network access to your printers (same LAN or VLAN)
 - For Prusa: PrusaLink enabled on the printer (built-in on Mini/Mini+, requires Raspberry Pi on MK3S)
