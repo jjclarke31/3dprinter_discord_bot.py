@@ -1,0 +1,4 @@
+discord.py
+requests
+python-dotenv
+bambulabs-api

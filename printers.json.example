@@ -1,0 +1,27 @@
+{
+    "status_title": "Your Status Title",
+    "refresh_interval_seconds": 30,
+    "printers": [
+        {
+            "name": "Bambu P1P",
+            "type": "bambu",
+            "ip": "your_printer_ip",
+            "serial": "your_serial_number",
+            "access_code": "your_access_code"
+        },
+        {
+            "name": "Prusa Mini",
+            "type": "prusa",
+            "ip": "your_printer_ip",
+            "api_key": "your_api_key"
+        },
+        {
+            "name": "Prusa MK3S",
+            "type": "prusa",
+            "ip": "your_printer_ip",
+            "auth_type": "digest",
+            "username": "your_prusalink_username",
+            "password": "your_prusalink_password"
+        }
+    ]
+}
