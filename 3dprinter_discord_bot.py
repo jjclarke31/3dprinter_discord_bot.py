@@ -540,19 +540,20 @@ async def update_status():
             # For Bambu printers, raw_bambu_state == "FINISH" means completed
             bambu_finished = status.get("raw_bambu_state") == "FINISH"
 
-            # Calculate duration:
-            # 1. Use printer-reported time_printing if available (Prusa)
-            # 2. Fall back to in-memory start time tracker (Bambu, or if API didn't report it)
-            reported_time = prev.get("time_printing")
-            start_time = print_start_times.pop(printer_name, None)
+            if status["state"] in ("IDLE", "READY", "FINISHED") or bambu_finished or status["state"] in ("ERROR", "STOPPED"):
+                # Print ended (completed or failed) - calculate duration now
+                # 1. Use printer-reported time_printing if available (Prusa)
+                # 2. Fall back to in-memory start time tracker (Bambu, or if API didn't report it)
+                reported_time = prev.get("time_printing")
+                start_time = print_start_times.pop(printer_name, None)
 
-            if reported_time:
-                duration_str = format_time(int(reported_time))
-            elif start_time:
-                elapsed = datetime.now() - start_time
-                duration_str = format_time(int(elapsed.total_seconds()))
-            else:
-                duration_str = None  # Bot restarted mid-print; omit duration
+                if reported_time:
+                    duration_str = format_time(int(reported_time))
+                elif start_time:
+                    elapsed = datetime.now() - start_time
+                    duration_str = format_time(int(elapsed.total_seconds()))
+                else:
+                    duration_str = None  # Bot restarted mid-print; omit duration
 
             if status["state"] in ("IDLE", "READY", "FINISHED") or bambu_finished:
                 # Print completed!
