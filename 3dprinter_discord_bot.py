@@ -427,10 +427,13 @@ status_message_id = None
 # Key: printer name, Value: dict with state and file info from last poll
 previous_states = {}
 
-# Track when each printer started its current print job (in-memory only)
-# Key: printer name, Value: datetime when printing state was first detected
+# Track print duration for each printer (in-memory only).
+# Excludes paused time to normalize with Prusa's time_printing behavior.
+# Key: printer name, Value: dict with:
+#   "accumulated_seconds": total printing seconds so far (frozen while paused)
+#   "segment_start": datetime when current printing segment began (None if paused)
 # If the bot restarts mid-print, this will be empty and duration will be omitted.
-print_start_times = {}
+print_duration_trackers = {}
 
 # Load printers and global config from config file
 PRINTERS, POLL_INTERVAL, STATUS_TITLE = load_config()
@@ -531,58 +534,75 @@ async def update_status():
         if status["state"] == "UNKNOWN":
             continue
 
-        # Record start time when a printer transitions into PRINTING
+        # --- Duration tracking (excludes paused time) ---
+        # Start a new tracker when a printer begins printing (but not when resuming from pause)
         if status["state"] == "PRINTING" and (not prev or prev["state"] != "PRINTING"):
-            print_start_times[printer_name] = datetime.now()
+            if prev and prev["state"] == "PAUSED":
+                # Resuming from pause — restart the segment timer, keep accumulated time
+                tracker = print_duration_trackers.get(printer_name)
+                if tracker:
+                    tracker["segment_start"] = datetime.now()
+            else:
+                # New print job — fresh tracker
+                print_duration_trackers[printer_name] = {
+                    "accumulated_seconds": 0,
+                    "segment_start": datetime.now(),
+                }
 
-        if prev and prev["state"] == "PRINTING":
-            # Printer was printing last poll, check if it finished or failed
+        # When a printer pauses, freeze the current segment
+        if status["state"] == "PAUSED" and prev and prev["state"] == "PRINTING":
+            tracker = print_duration_trackers.get(printer_name)
+            if tracker and tracker["segment_start"]:
+                elapsed = (datetime.now() - tracker["segment_start"]).total_seconds()
+                tracker["accumulated_seconds"] += elapsed
+                tracker["segment_start"] = None  # Frozen while paused
+
+        # --- Check for completed or failed prints ---
+        if prev and prev["state"] in ("PRINTING", "PAUSED"):
             # For Bambu printers, raw_bambu_state == "FINISH" means completed
             bambu_finished = status.get("raw_bambu_state") == "FINISH"
+            print_ended = status["state"] in ("IDLE", "READY", "FINISHED") or bambu_finished
+            print_failed = status["state"] in ("ERROR", "STOPPED")
 
-            # Calculate duration:
-            # 1. Use printer-reported time_printing if available (Prusa)
-            # 2. Fall back to in-memory start time tracker (Bambu, or if API didn't report it)
-            reported_time = prev.get("time_printing")
-            start_time = print_start_times.pop(printer_name, None)
+            if print_ended or print_failed:
+                # Calculate final duration:
+                # 1. Use printer-reported time_printing if available (Prusa)
+                # 2. Fall back to in-memory tracker (Bambu, or if API didn't report it)
+                reported_time = prev.get("time_printing")
+                tracker = print_duration_trackers.pop(printer_name, None)
 
-            if reported_time:
-                duration_str = format_time(int(reported_time))
-            elif start_time:
-                elapsed = datetime.now() - start_time
-                duration_str = format_time(int(elapsed.total_seconds()))
-            else:
-                duration_str = None  # Bot restarted mid-print; omit duration
+                if reported_time:
+                    duration_str = format_time(int(reported_time))
+                elif tracker:
+                    total = tracker["accumulated_seconds"]
+                    if tracker["segment_start"]:
+                        # Add time from the final printing segment
+                        total += (datetime.now() - tracker["segment_start"]).total_seconds()
+                    duration_str = format_time(int(total))
+                else:
+                    duration_str = None  # Bot restarted mid-print; omit duration
 
-            if status["state"] in ("IDLE", "READY", "FINISHED") or bambu_finished:
-                # Print completed!
                 member = await find_member_by_username(guild, prev.get("username"))
                 mention = member.mention if member else (f"@{prev['username']}" if prev.get("username") else "Unknown user")
                 prev_file = prev.get("file_name", "Unknown file")
-
                 duration_line = f"Print time: {duration_str}\n" if duration_str else ""
-                await notification_channel.send(
-                    f"**Print Complete** on **{printer_name}**\n"
-                    f"`{prev_file}`\n"
-                    f"{mention}\n"
-                    f"{duration_line}"
-                    f"Your print is ready for pickup!"
-                )
 
-            elif status["state"] in ("ERROR", "STOPPED"):
-                # Print failed!
-                member = await find_member_by_username(guild, prev.get("username"))
-                mention = member.mention if member else (f"@{prev['username']}" if prev.get("username") else "Unknown user")
-                prev_file = prev.get("file_name", "Unknown file")
-
-                duration_line = f"Print time: {duration_str}\n" if duration_str else ""
-                await notification_channel.send(
-                    f"**Print Failed** on **{printer_name}**\n"
-                    f"`{prev_file}`\n"
-                    f"{mention}\n"
-                    f"{duration_line}"
-                    f"Please check the printer."
-                )
+                if print_ended:
+                    await notification_channel.send(
+                        f"**Print Complete** on **{printer_name}**\n"
+                        f"`{prev_file}`\n"
+                        f"{mention}\n"
+                        f"{duration_line}"
+                        f"Your print is ready for pickup!"
+                    )
+                else:
+                    await notification_channel.send(
+                        f"**Print Failed** on **{printer_name}**\n"
+                        f"`{prev_file}`\n"
+                        f"{mention}\n"
+                        f"{duration_line}"
+                        f"Please check the printer."
+                    )
 
         # Save current state for next poll comparison
         previous_states[printer_name] = {
