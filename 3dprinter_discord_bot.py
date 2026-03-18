@@ -564,7 +564,6 @@ async def update_status():
             print_ended = status["state"] in ("IDLE", "READY", "FINISHED") or bambu_finished
             print_failed = status["state"] in ("ERROR", "STOPPED")
 
-<<<<<<< HEAD
             if print_ended or print_failed:
                 # Calculate final duration:
                 # 1. Use printer-reported time_printing if available (Prusa)
@@ -580,20 +579,6 @@ async def update_status():
                         # Add time from the final printing segment
                         total += (datetime.now() - tracker["segment_start"]).total_seconds()
                     duration_str = format_time(int(total))
-=======
-            if status["state"] in ("IDLE", "READY", "FINISHED") or bambu_finished or status["state"] in ("ERROR", "STOPPED"):
-                # Print ended (completed or failed) - calculate duration now
-                # 1. Use printer-reported time_printing if available (Prusa)
-                # 2. Fall back to in-memory start time tracker (Bambu, or if API didn't report it)
-                reported_time = prev.get("time_printing")
-                start_time = print_start_times.pop(printer_name, None)
-
-                if reported_time:
-                    duration_str = format_time(int(reported_time))
-                elif start_time:
-                    elapsed = datetime.now() - start_time
-                    duration_str = format_time(int(elapsed.total_seconds()))
->>>>>>> daa4f7004d26404da13f4c54b7cd5f7d5b7a2e4e
                 else:
                     duration_str = None  # Bot restarted mid-print; omit duration
 
